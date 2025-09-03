@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, flash
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, make_response
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import func
 import datetime as dt
@@ -294,6 +294,121 @@ def analytics():
         filter_end=end_str,
         filter_position=pos,
     )
+
+
+# Settings
+@app.route('/settings', methods=['GET', 'POST'])
+@login_required
+def settings():
+    if request.method == 'POST':
+        try:
+            new_username = (request.form.get('username') or '').strip()
+            current_password = request.form.get('current_password') or ''
+            new_password = request.form.get('new_password') or ''
+            confirm_password = request.form.get('confirm_password') or ''
+
+            if not current_password:
+                raise ValueError('Current password is required')
+            if not current_user.check_password(current_password):
+                raise ValueError('Current password is incorrect')
+
+            if new_username:
+                existing = User.query.filter(User.username == new_username, User.id != current_user.id).first()
+                if existing:
+                    raise ValueError('Username already taken')
+                current_user.username = new_username
+
+            if new_password or confirm_password:
+                if new_password != confirm_password:
+                    raise ValueError('New passwords do not match')
+                if len(new_password) < 4:
+                    raise ValueError('New password must be at least 4 characters')
+                current_user.set_password(new_password)
+
+            db.session.commit()
+            flash('Settings updated.', 'success')
+            return redirect(url_for('settings'))
+        except Exception as exc:
+            db.session.rollback()
+            flash(str(exc), 'danger')
+    return render_template('settings.html')
+
+
+@app.route('/export')
+@login_required
+def export_data():
+    fmt = (request.args.get('format') or 'csv').lower()
+    user_shifts = Shift.query.filter(Shift.user_id == current_user.id).order_by(Shift.date.asc(), Shift.id.asc()).all()
+
+    if fmt == 'json':
+        data = [
+            {
+                'id': s.id,
+                'date': s.date.isoformat() if s.date else None,
+                'position': s.position,
+                'hours': s.hours,
+                'hourly_rate': s.hourly_rate,
+                'tips': s.tips,
+                'notes': s.notes,
+                'wages': s.wages,
+                'total_pay': s.total_pay,
+                'start_dt': s.start_dt.isoformat() if s.start_dt else None,
+                'end_dt': s.end_dt.isoformat() if s.end_dt else None,
+            }
+            for s in user_shifts
+        ]
+        response = make_response(jsonify(data))
+        response.headers['Content-Disposition'] = 'attachment; filename=shifts.json'
+        return response
+
+    # default CSV
+    import csv
+    import io
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(['id','date','position','hours','hourly_rate','tips','notes','wages','total_pay','start_dt','end_dt'])
+    for s in user_shifts:
+        writer.writerow([
+            s.id,
+            s.date.isoformat() if s.date else '',
+            s.position,
+            s.hours,
+            s.hourly_rate,
+            s.tips,
+            (s.notes or '').replace('\n',' ').strip(),
+            s.wages,
+            s.total_pay,
+            s.start_dt.isoformat() if s.start_dt else '',
+            s.end_dt.isoformat() if s.end_dt else '',
+        ])
+    response = make_response(output.getvalue())
+    response.headers['Content-Type'] = 'text/csv'
+    response.headers['Content-Disposition'] = 'attachment; filename=shifts.csv'
+    return response
+
+
+@app.route('/delete_account', methods=['POST'])
+@login_required
+def delete_account():
+    try:
+        password = request.form.get('confirm_password') or ''
+        if not password:
+            raise ValueError('Password confirmation is required')
+        if not current_user.check_password(password):
+            raise ValueError('Password is incorrect')
+
+        # delete user-owned shifts first due to FK relationship
+        Shift.query.filter(Shift.user_id == current_user.id).delete()
+        # delete the user
+        user = db.session.get(User, current_user.id)
+        db.session.delete(user)
+        db.session.commit()
+        flash('Your account and data have been deleted.', 'info')
+        return redirect(url_for('register'))
+    except Exception as exc:
+        db.session.rollback()
+        flash(str(exc), 'danger')
+        return redirect(url_for('settings'))
 
 
 # Authentication routes

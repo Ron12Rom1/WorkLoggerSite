@@ -1,0 +1,57 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="row">
+  <div class="col-12 col-md-8 col-lg-6">
+    <h2 class="mb-3">Account Settings</h2>
+    <form method="post">
+      <div class="mb-3">
+        <label for="username" class="form-label">Username</label>
+        <input type="text" class="form-control" id="username" name="username" placeholder="Leave unchanged to keep current" value="{{ current_user.username }}">
+      </div>
+      <hr>
+      <div class="mb-3">
+        <label for="current_password" class="form-label">Current password</label>
+        <input type="password" class="form-control" id="current_password" name="current_password" required>
+      </div>
+      <div class="mb-3">
+        <label for="new_password" class="form-label">New password</label>
+        <input type="password" class="form-control" id="new_password" name="new_password" placeholder="Leave blank to keep current">
+      </div>
+      <div class="mb-3">
+        <label for="confirm_password" class="form-label">Confirm new password</label>
+        <input type="password" class="form-control" id="confirm_password" name="confirm_password" placeholder="Repeat new password">
+      </div>
+      <button type="submit" class="btn btn-primary">Save changes</button>
+    </form>
+  </div>
+  <div class="col-12 col-md-4 col-lg-6 mt-4 mt-md-0">
+    <div class="card mb-3">
+      <div class="card-body">
+        <h5 class="card-title">Export your data</h5>
+        <p class="card-text">Download your shifts as CSV or JSON.</p>
+        <a class="btn btn-outline-secondary me-2" href="{{ url_for('export_data', format='csv') }}">Download CSV</a>
+        <a class="btn btn-outline-secondary" href="{{ url_for('export_data', format='json') }}">Download JSON</a>
+      </div>
+    </div>
+    <div class="card border-danger">
+      <div class="card-body">
+        <h5 class="card-title text-danger">Delete account</h5>
+        <p class="card-text">This action is permanent and will remove all your shifts.</p>
+        <form method="post" action="{{ url_for('delete_account') }}" onsubmit="return confirm('Permanently delete your account and all data?');">
+          <div class="mb-2">
+            <label for="confirm_password" class="form-label">Confirm password</label>
+            <input type="password" class="form-control" id="confirm_password" name="confirm_password" required>
+          </div>
+          <button type="submit" class="btn btn-danger">Delete account</button>
+        </form>
+      </div>
+    </div>
+    <div class="alert alert-info mt-3">
+      <strong>Tip:</strong> You must enter your current password to update settings. Leave the new password fields blank if you only want to change your username.
+    </div>
+  </div>
+  
+</div>
+{% endblock %}
+
+
