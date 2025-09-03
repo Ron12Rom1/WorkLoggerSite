@@ -5,7 +5,10 @@ import datetime as dt
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
+
+
+from functools import wraps
 
 
 app = Flask(__name__)
@@ -16,19 +19,33 @@ app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{db_path}"
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.config["SECRET_KEY"] = "change-this-in-production"
 
+# Email configuration (optional, for future features)
+app.config["MAIL_SERVER"] = "smtp.gmail.com"
+app.config["MAIL_PORT"] = 587
+app.config["MAIL_USE_TLS"] = True
+app.config["MAIL_USERNAME"] = os.environ.get("MAIL_USERNAME", "your-email@gmail.com")
+app.config["MAIL_PASSWORD"] = os.environ.get("MAIL_PASSWORD", "your-app-password")
+
 db = SQLAlchemy(app)
 
 
 class User(db.Model, UserMixin):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False, index=True)
+    email = db.Column(db.String(120), unique=True, nullable=True, index=True)
     password_hash = db.Column(db.String(255), nullable=False)
+    is_admin = db.Column(db.Boolean, default=False, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    is_active = db.Column(db.Boolean, default=True, nullable=False)
 
     def set_password(self, password: str) -> None:
         self.password_hash = generate_password_hash(password)
 
     def check_password(self, password: str) -> bool:
         return check_password_hash(self.password_hash, password)
+
+
+
 
 
 class Shift(db.Model):
@@ -68,6 +85,19 @@ def load_user(user_id: str):
     return db.session.get(User, int(user_id))
 
 
+def admin_required(f):
+    """Decorator to require admin privileges for a route"""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not current_user.is_authenticated:
+            return redirect(url_for('login'))
+        if not current_user.is_admin:
+            flash('Access denied. Admin privileges required.', 'danger')
+            return redirect(url_for('index'))
+        return f(*args, **kwargs)
+    return decorated_function
+
+
 @app.route("/")
 @login_required
 def index():
@@ -97,6 +127,9 @@ def parse_datetime_local(value: str) -> datetime | None:
         return datetime.strptime(value, "%Y-%m-%dT%H:%M")
     except ValueError:
         return None
+
+
+
 
 
 @app.route("/shift/new", methods=["GET", "POST"])
@@ -303,6 +336,7 @@ def settings():
     if request.method == 'POST':
         try:
             new_username = (request.form.get('username') or '').strip()
+            new_email = (request.form.get('email') or '').strip()
             current_password = request.form.get('current_password') or ''
             new_password = request.form.get('new_password') or ''
             confirm_password = request.form.get('confirm_password') or ''
@@ -317,6 +351,13 @@ def settings():
                 if existing:
                     raise ValueError('Username already taken')
                 current_user.username = new_username
+
+            if new_email != current_user.email:
+                if new_email:
+                    existing = User.query.filter(User.email == new_email, User.id != current_user.id).first()
+                    if existing:
+                        raise ValueError('Email already registered')
+                current_user.email = new_email if new_email else None
 
             if new_password or confirm_password:
                 if new_password != confirm_password:
@@ -418,14 +459,21 @@ def register():
         return redirect(url_for('index'))
     if request.method == 'POST':
         username = (request.form.get('username') or '').strip()
+        email = (request.form.get('email') or '').strip()
         password = request.form.get('password') or ''
         if not username or not password:
             flash('Username and password are required', 'danger')
             return render_template('register.html')
+        if len(password) < 4:
+            flash('Password must be at least 4 characters long', 'danger')
+            return render_template('register.html')
         if User.query.filter_by(username=username).first():
             flash('Username already taken', 'danger')
             return render_template('register.html')
-        user = User(username=username)
+        if email and User.query.filter_by(email=email).first():
+            flash('Email already registered', 'danger')
+            return render_template('register.html')
+        user = User(username=username, email=email if email else None)
         user.set_password(password)
         db.session.add(user)
         db.session.commit()
@@ -461,6 +509,312 @@ def logout():
     return redirect(url_for('login'))
 
 
+
+
+
+# Admin routes
+@app.route('/admin')
+@admin_required
+def admin_dashboard():
+    """Admin dashboard with system overview"""
+    # Get system statistics
+    total_users = User.query.count()
+    active_users = User.query.filter_by(is_active=True).count()
+    admin_users = User.query.filter_by(is_admin=True).count()
+    
+    # Get recent shifts (last 7 days)
+    week_ago = datetime.utcnow() - timedelta(days=7)
+    recent_shifts = Shift.query.filter(Shift.start_dt >= week_ago).count()
+    
+    # Get shifts for today
+    today = datetime.utcnow().date()
+    today_shifts = Shift.query.filter(Shift.date == today).count()
+    
+    # Get recent users (last 7 days)
+    recent_users = User.query.filter(User.created_at >= week_ago).count()
+    
+    # Get recent activity (last 10 shifts)
+    recent_activity = db.session.query(Shift, User).join(User).order_by(Shift.id.desc()).limit(10).all()
+    
+    stats = {
+        'total_users': total_users,
+        'active_users': active_users,
+        'admin_users': admin_users,
+        'recent_shifts': recent_shifts,
+        'today_shifts': today_shifts,
+        'recent_users': recent_users
+    }
+    
+    return render_template('admin/dashboard.html', stats=stats, recent_activity=recent_activity)
+
+
+@app.route('/admin/users')
+@admin_required
+def admin_users():
+    """List all users with admin controls"""
+    page = request.args.get('page', 1, type=int)
+    search = request.args.get('search', '').strip()
+    status_filter = request.args.get('status', 'all')
+    
+    query = User.query
+    
+    # Apply search filter
+    if search:
+        query = query.filter(User.username.contains(search))
+    
+    # Apply status filter
+    if status_filter == 'active':
+        query = query.filter_by(is_active=True)
+    elif status_filter == 'inactive':
+        query = query.filter_by(is_active=False)
+    elif status_filter == 'admin':
+        query = query.filter_by(is_admin=True)
+    
+    # Paginate results
+    users = query.order_by(User.created_at.desc()).paginate(
+        page=page, per_page=20, error_out=False
+    )
+    
+    return render_template('admin/users.html', users=users, search=search, status_filter=status_filter)
+
+
+@app.route('/admin/users/new', methods=['GET', 'POST'])
+@admin_required
+def admin_users_new():
+    """Create a new user"""
+    if request.method == 'POST':
+        try:
+            username = (request.form.get('username') or '').strip()
+            email = (request.form.get('email') or '').strip()
+            password = request.form.get('password') or ''
+            is_admin = 'is_admin' in request.form
+            
+            if not username or not password:
+                raise ValueError('Username and password are required')
+            
+            if len(password) < 4:
+                raise ValueError('Password must be at least 4 characters long')
+            
+            if User.query.filter_by(username=username).first():
+                raise ValueError('Username already taken')
+            
+            if email and User.query.filter_by(email=email).first():
+                raise ValueError('Email already registered')
+            
+            user = User(
+                username=username,
+                email=email if email else None,
+                is_admin=is_admin
+            )
+            user.set_password(password)
+            db.session.add(user)
+            db.session.commit()
+            
+            flash(f'User "{username}" created successfully.', 'success')
+            return redirect(url_for('admin_users'))
+            
+        except Exception as exc:
+            db.session.rollback()
+            flash(str(exc), 'danger')
+    
+    return render_template('admin/user_form.html', user=None)
+
+
+@app.route('/admin/users/<int:user_id>/edit', methods=['GET', 'POST'])
+@admin_required
+def admin_users_edit(user_id):
+    """Edit a user"""
+    user = User.query.get_or_404(user_id)
+    
+    if request.method == 'POST':
+        try:
+            username = (request.form.get('username') or '').strip()
+            email = (request.form.get('email') or '').strip()
+            password = request.form.get('password') or ''
+            is_admin = 'is_admin' in request.form
+            is_active = 'is_active' in request.form
+            
+            if not username:
+                raise ValueError('Username is required')
+            
+            # Check username uniqueness (excluding current user)
+            existing = User.query.filter(User.username == username, User.id != user.id).first()
+            if existing:
+                raise ValueError('Username already taken')
+            
+            # Check email uniqueness (excluding current user)
+            if email:
+                existing = User.query.filter(User.email == email, User.id != user.id).first()
+                if existing:
+                    raise ValueError('Email already registered')
+            
+            # Update user fields
+            user.username = username
+            user.email = email if email else None
+            user.is_admin = is_admin
+            user.is_active = is_active
+            
+            # Update password if provided
+            if password:
+                if len(password) < 4:
+                    raise ValueError('Password must be at least 4 characters long')
+                user.set_password(password)
+            
+            db.session.commit()
+            flash(f'User "{username}" updated successfully.', 'success')
+            return redirect(url_for('admin_users'))
+            
+        except Exception as exc:
+            db.session.rollback()
+            flash(str(exc), 'danger')
+    
+    return render_template('admin/user_form.html', user=user)
+
+
+@app.route('/admin/users/<int:user_id>/delete', methods=['POST'])
+@admin_required
+def admin_users_delete(user_id):
+    """Delete a user"""
+    user = User.query.get_or_404(user_id)
+    
+    # Prevent deleting yourself
+    if user.id == current_user.id:
+        flash('You cannot delete your own account.', 'danger')
+        return redirect(url_for('admin_users'))
+    
+    try:
+        username = user.username
+        
+        # Delete user's shifts first (due to foreign key constraint)
+        Shift.query.filter_by(user_id=user.id).delete()
+        
+        # Delete the user
+        db.session.delete(user)
+        db.session.commit()
+        
+        flash(f'User "{username}" and all their data have been deleted.', 'success')
+        
+    except Exception as exc:
+        db.session.rollback()
+        flash(f'Error deleting user: {exc}', 'danger')
+    
+    return redirect(url_for('admin_users'))
+
+
+@app.route('/admin/shifts')
+@admin_required
+def admin_shifts():
+    """View all shifts across all users"""
+    page = request.args.get('page', 1, type=int)
+    search = request.args.get('search', '').strip()
+    user_filter = request.args.get('user', '').strip()
+    date_from = request.args.get('date_from', '').strip()
+    date_to = request.args.get('date_to', '').strip()
+    
+    # Build query with joins
+    query = db.session.query(Shift, User).join(User)
+    
+    # Apply filters
+    if search:
+        query = query.filter(Shift.position.contains(search))
+    
+    if user_filter:
+        query = query.filter(User.username.contains(user_filter))
+    
+    if date_from:
+        try:
+            from_date = dt.date.fromisoformat(date_from)
+            query = query.filter(Shift.date >= from_date)
+        except ValueError:
+            date_from = ""
+    
+    if date_to:
+        try:
+            to_date = dt.date.fromisoformat(date_to)
+            query = query.filter(Shift.date <= to_date)
+        except ValueError:
+            date_to = ""
+    
+    # Paginate results
+    shifts_data = query.order_by(Shift.date.desc(), Shift.id.desc()).paginate(
+        page=page, per_page=20, error_out=False
+    )
+    
+    # Get all users for filter dropdown
+    all_users = User.query.order_by(User.username).all()
+    
+    return render_template('admin/shifts.html', 
+                         shifts_data=shifts_data, 
+                         search=search, 
+                         user_filter=user_filter,
+                         date_from=date_from,
+                         date_to=date_to,
+                         all_users=all_users)
+
+
+@app.route('/admin/shifts/<int:shift_id>/edit', methods=['GET', 'POST'])
+@admin_required
+def admin_shifts_edit(shift_id):
+    """Edit any shift (admin only)"""
+    shift = Shift.query.get_or_404(shift_id)
+    user = shift.user
+    positions = get_unique_positions()
+    
+    if request.method == 'POST':
+        try:
+            start_str = request.form.get("start_dt")
+            end_str = request.form.get("end_dt")
+            position = (request.form.get("position") or "").strip()
+            start_dt = parse_datetime_local(start_str)
+            end_dt = parse_datetime_local(end_str)
+            total_salary = parse_float(request.form.get("total_salary"))
+            tips = parse_float(request.form.get("tips"))
+            notes = (request.form.get("notes") or "").strip()
+
+            if not start_dt or not end_dt or not position:
+                raise ValueError("Start, end, and position are required")
+            if end_dt <= start_dt:
+                raise ValueError("End datetime must be after start datetime")
+
+            hours = round((end_dt - start_dt).total_seconds() / 3600.0, 2)
+            shift.date = start_dt.date()
+            shift.position = position
+            shift.hours = hours
+            shift.hourly_rate = round((total_salary / hours), 2) if hours else 0.0
+            shift.tips = tips
+            shift.notes = notes
+            shift.start_dt = start_dt
+            shift.end_dt = end_dt
+            
+            db.session.commit()
+            flash(f"Shift updated for {user.username}.", "success")
+            return redirect(url_for('admin_shifts'))
+            
+        except Exception as exc:
+            db.session.rollback()
+            flash(f"Error updating shift: {exc}", "danger")
+    
+    return render_template("add_edit.html", shift=shift, positions=positions, admin_edit=True, user=user)
+
+
+@app.route('/admin/shifts/<int:shift_id>/delete', methods=['POST'])
+@admin_required
+def admin_shifts_delete(shift_id):
+    """Delete any shift (admin only)"""
+    shift = Shift.query.get_or_404(shift_id)
+    user = shift.user
+    
+    try:
+        db.session.delete(shift)
+        db.session.commit()
+        flash(f"Shift deleted for {user.username}.", "info")
+    except Exception as exc:
+        db.session.rollback()
+        flash(f"Error deleting shift: {exc}", "danger")
+    
+    return redirect(url_for('admin_shifts'))
+
+
 def ensure_user_id_column():
     # Ensure user_id column exists on Shift for existing DBs
     try:
@@ -479,6 +833,39 @@ def ensure_user_id_column():
         db.session.rollback()
 
 
+def ensure_email_column():
+    # Ensure email column exists on User for existing DBs
+    try:
+        info = db.session.execute(db.text("PRAGMA table_info(user)")).fetchall()
+        cols = {row[1] for row in info}
+        if 'email' not in cols:
+            db.session.execute(db.text('ALTER TABLE user ADD COLUMN email VARCHAR(120)'))
+            db.session.commit()
+    except Exception:
+        db.session.rollback()
+
+
+def ensure_admin_columns():
+    # Ensure admin-related columns exist on User for existing DBs
+    try:
+        info = db.session.execute(db.text("PRAGMA table_info(user)")).fetchall()
+        cols = {row[1] for row in info}
+        
+        if 'is_admin' not in cols:
+            db.session.execute(db.text('ALTER TABLE user ADD COLUMN is_admin BOOLEAN DEFAULT 0'))
+            db.session.commit()
+        
+        if 'created_at' not in cols:
+            db.session.execute(db.text('ALTER TABLE user ADD COLUMN created_at DATETIME DEFAULT CURRENT_TIMESTAMP'))
+            db.session.commit()
+        
+        if 'is_active' not in cols:
+            db.session.execute(db.text('ALTER TABLE user ADD COLUMN is_active BOOLEAN DEFAULT 1'))
+            db.session.commit()
+    except Exception:
+        db.session.rollback()
+
+
 def seed_mock_data() -> None:
     # Ensure demo user exists
     demo = User.query.filter_by(username='demo').first()
@@ -486,6 +873,14 @@ def seed_mock_data() -> None:
         demo = User(username='demo')
         demo.set_password('demo')
         db.session.add(demo)
+        db.session.commit()
+    
+    # Ensure admin user exists
+    admin = User.query.filter_by(username='admin').first()
+    if admin is None:
+        admin = User(username='admin', is_admin=True)
+        admin.set_password('admin')
+        db.session.add(admin)
         db.session.commit()
 
     # Only seed shifts if none exist
@@ -519,6 +914,8 @@ if __name__ == "__main__":
     with app.app_context():
         db.create_all()
         ensure_user_id_column()
+        ensure_email_column()
+        ensure_admin_columns()
         seed_mock_data()
     app.run(host="0.0.0.0", port=5000, debug=True)
 

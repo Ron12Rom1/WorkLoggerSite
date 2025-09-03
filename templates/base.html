@@ -21,6 +21,20 @@
               <li class="nav-item"><a class="nav-link" href="{{ url_for('index') }}">Shifts</a></li>
               <li class="nav-item"><a class="nav-link" href="{{ url_for('add_shift') }}">Add Shift</a></li>
               <li class="nav-item"><a class="nav-link" href="{{ url_for('analytics') }}">Analytics</a></li>
+              {% if current_user.is_admin %}
+                <li class="nav-item dropdown">
+                  <a class="nav-link dropdown-toggle" href="#" id="adminDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                    Admin
+                  </a>
+                  <ul class="dropdown-menu" aria-labelledby="adminDropdown">
+                    <li><a class="dropdown-item" href="{{ url_for('admin_dashboard') }}">Dashboard</a></li>
+                    <li><a class="dropdown-item" href="{{ url_for('admin_users') }}">Manage Users</a></li>
+                    <li><a class="dropdown-item" href="{{ url_for('admin_shifts') }}">All Shifts</a></li>
+                    <li><hr class="dropdown-divider"></li>
+                    <li><a class="dropdown-item" href="{{ url_for('admin_users_new') }}">Add User</a></li>
+                  </ul>
+                </li>
+              {% endif %}
               <li class="nav-item"><a class="nav-link" href="{{ url_for('settings') }}">Settings</a></li>
             {% endif %}
           </ul>

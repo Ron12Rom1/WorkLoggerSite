@@ -1,0 +1,164 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="row">
+  <div class="col-12">
+    <h2 class="mb-4">🏠 Admin Dashboard</h2>
+  </div>
+</div>
+
+<!-- Quick Stats -->
+<div class="row mb-4">
+  <div class="col-md-3 mb-3">
+    <div class="card bg-primary text-white">
+      <div class="card-body">
+        <div class="d-flex justify-content-between">
+          <div>
+            <h4 class="card-title">{{ stats.total_users }}</h4>
+            <p class="card-text">Total Users</p>
+          </div>
+          <div class="align-self-center">
+            <i class="fas fa-users fa-2x"></i>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <div class="col-md-3 mb-3">
+    <div class="card bg-success text-white">
+      <div class="card-body">
+        <div class="d-flex justify-content-between">
+          <div>
+            <h4 class="card-title">{{ stats.active_users }}</h4>
+            <p class="card-text">Active Users</p>
+          </div>
+          <div class="align-self-center">
+            <i class="fas fa-user-check fa-2x"></i>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <div class="col-md-3 mb-3">
+    <div class="card bg-info text-white">
+      <div class="card-body">
+        <div class="d-flex justify-content-between">
+          <div>
+            <h4 class="card-title">{{ stats.today_shifts }}</h4>
+            <p class="card-text">Shifts Today</p>
+          </div>
+          <div class="align-self-center">
+            <i class="fas fa-calendar-day fa-2x"></i>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <div class="col-md-3 mb-3">
+    <div class="card bg-warning text-white">
+      <div class="card-body">
+        <div class="d-flex justify-content-between">
+          <div>
+            <h4 class="card-title">{{ stats.recent_shifts }}</h4>
+            <p class="card-text">This Week</p>
+          </div>
+          <div class="align-self-center">
+            <i class="fas fa-calendar-week fa-2x"></i>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Quick Actions -->
+<div class="row mb-4">
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header">
+        <h5 class="mb-0">🚀 Quick Actions</h5>
+      </div>
+      <div class="card-body">
+        <div class="row">
+          <div class="col-md-3 mb-2">
+            <a href="{{ url_for('admin_users') }}" class="btn btn-outline-primary btn-block">
+              <i class="fas fa-users"></i> Manage Users
+            </a>
+          </div>
+          <div class="col-md-3 mb-2">
+            <a href="{{ url_for('admin_shifts') }}" class="btn btn-outline-secondary btn-block">
+              <i class="fas fa-clock"></i> View All Shifts
+            </a>
+          </div>
+          <div class="col-md-3 mb-2">
+            <a href="{{ url_for('admin_users_new') }}" class="btn btn-outline-success btn-block">
+              <i class="fas fa-user-plus"></i> Add User
+            </a>
+          </div>
+          <div class="col-md-3 mb-2">
+            <a href="{{ url_for('export_data') }}" class="btn btn-outline-info btn-block">
+              <i class="fas fa-download"></i> Export Data
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Recent Activity -->
+<div class="row">
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header">
+        <h5 class="mb-0">📈 Recent Activity</h5>
+      </div>
+      <div class="card-body">
+        {% if recent_activity %}
+          <div class="table-responsive">
+            <table class="table table-sm">
+              <thead>
+                <tr>
+                  <th>User</th>
+                  <th>Date</th>
+                  <th>Position</th>
+                  <th>Hours</th>
+                  <th>Total Pay</th>
+                  <th>Time</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for shift, user in recent_activity %}
+                <tr>
+                  <td>
+                    <strong>{{ user.username }}</strong>
+                    {% if user.is_admin %}
+                      <span class="badge bg-danger ms-1">Admin</span>
+                    {% endif %}
+                  </td>
+                  <td>{{ shift.date.strftime('%Y-%m-%d') if shift.date else 'N/A' }}</td>
+                  <td>{{ shift.position }}</td>
+                  <td>{{ shift.hours }}</td>
+                  <td>${{ shift.total_pay }}</td>
+                  <td>
+                    {% if shift.start_dt %}
+                      {{ shift.start_dt.strftime('%H:%M') }} - {{ shift.end_dt.strftime('%H:%M') if shift.end_dt else 'N/A' }}
+                    {% else %}
+                      N/A
+                    {% endif %}
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% else %}
+          <p class="text-muted">No recent activity to display.</p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

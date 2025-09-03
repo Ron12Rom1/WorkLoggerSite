@@ -1,6 +1,18 @@
 {% extends 'base.html' %}
 {% block content %}
-<h2>{{ 'Edit Shift' if shift else 'Add Shift' }}</h2>
+<h2>
+  {% if admin_edit %}
+    ✏️ Edit Shift for {{ user.username }}
+  {% else %}
+    {{ 'Edit Shift' if shift else 'Add Shift' }}
+  {% endif %}
+</h2>
+
+{% if admin_edit %}
+<div class="alert alert-info">
+  <i class="fas fa-info-circle"></i> You are editing a shift as an administrator.
+</div>
+{% endif %}
 
 <form method="post" class="row g-3">
   <div class="col-md-4">
@@ -38,7 +50,11 @@
   </div>
   <div class="col-12">
     <button type="submit" class="btn btn-primary">{{ 'Save Changes' if shift else 'Add Shift' }}</button>
-    <a href="{{ url_for('index') }}" class="btn btn-secondary">Cancel</a>
+    {% if admin_edit %}
+      <a href="{{ url_for('admin_shifts') }}" class="btn btn-secondary">Cancel</a>
+    {% else %}
+      <a href="{{ url_for('index') }}" class="btn btn-secondary">Cancel</a>
+    {% endif %}
   </div>
 </form>
 {% endblock %}

@@ -8,6 +8,11 @@
         <label for="username" class="form-label">Username</label>
         <input type="text" class="form-control" id="username" name="username" placeholder="Leave unchanged to keep current" value="{{ current_user.username }}">
       </div>
+      <div class="mb-3">
+        <label for="email" class="form-label">Email</label>
+        <input type="email" class="form-control" id="email" name="email" placeholder="Leave unchanged to keep current" value="{{ current_user.email or '' }}">
+        <div class="form-text">Email is required for password reset functionality</div>
+      </div>
       <hr>
       <div class="mb-3">
         <label for="current_password" class="form-label">Current password</label>
