@@ -1,0 +1,15 @@
+/* Navbar horizontal separator above username */
+nav.navbar hr {
+  border: 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.5);
+  opacity: 0.5;
+  margin: 0.25rem 0; /* similar to Bootstrap my-1 */
+  width: 100%;
+}
+
+/* Optional: ensure the container doesn't shrink oddly in flex */
+nav.navbar .nav-item.d-flex {
+  min-width: 0;
+}
+
+

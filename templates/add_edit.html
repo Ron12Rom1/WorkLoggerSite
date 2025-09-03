@@ -1,0 +1,47 @@
+{% extends 'base.html' %}
+{% block content %}
+<h2>{{ 'Edit Shift' if shift else 'Add Shift' }}</h2>
+
+<form method="post" class="row g-3">
+  <div class="col-md-4">
+    <label class="form-label">Start</label>
+    <input type="datetime-local" name="start_dt" class="form-control" value="{{ (shift.start_dt.strftime('%Y-%m-%dT%H:%M') if shift and shift.start_dt else '') }}" required>
+  </div>
+  <div class="col-md-4">
+    <label class="form-label">End</label>
+    <input type="datetime-local" name="end_dt" class="form-control" value="{{ (shift.end_dt.strftime('%Y-%m-%dT%H:%M') if shift and shift.end_dt else '') }}" required>
+  </div>
+  <div class="col-md-3">
+    <label class="form-label">Position</label>
+    <input list="positions" name="position" class="form-control" value="{{ shift.position if shift else '' }}" placeholder="e.g. Server, Bartender" required>
+    <datalist id="positions">
+      {% for p in positions or [] %}
+      <option value="{{ p }}"></option>
+      {% endfor %}
+    </datalist>
+  </div>
+  <div class="col-md-2">
+    <label class="form-label">Hours (calculated)</label>
+    <input type="text" class="form-control" value="{{ '%.2f' % shift.hours if shift else '' }}" disabled>
+  </div>
+  <div class="col-md-2">
+    <label class="form-label">Salary</label>
+    <input type="number" step="0.01" name="total_salary" class="form-control" value="{{ '%.2f' % shift.wages if shift else '' }}" required>
+  </div>
+  <div class="col-md-2">
+    <label class="form-label">Tips</label>
+    <input type="number" step="0.01" name="tips" class="form-control" value="{{ '%.2f' % shift.tips if shift else '0.00' }}">
+  </div>
+  <div class="col-12">
+    <label class="form-label">Notes</label>
+    <textarea name="notes" class="form-control" rows="2" placeholder="Optional">{{ shift.notes if shift else '' }}</textarea>
+  </div>
+  <div class="col-12">
+    <button type="submit" class="btn btn-primary">{{ 'Save Changes' if shift else 'Add Shift' }}</button>
+    <a href="{{ url_for('index') }}" class="btn btn-secondary">Cancel</a>
+  </div>
+</form>
+{% endblock %}
+
+
+

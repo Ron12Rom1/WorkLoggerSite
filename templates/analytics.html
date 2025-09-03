@@ -1,0 +1,110 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-3">
+  <h2>Analytics</h2>
+  <a class="btn btn-outline-secondary" href="{{ url_for('index') }}">Back</a>
+</div>
+
+<form class="row g-2 mb-4" method="get" action="{{ url_for('analytics') }}">
+  <div class="col-sm-3">
+    <label class="form-label mb-1">Start</label>
+    <input type="date" class="form-control" name="start" value="{{ filter_start }}">
+  </div>
+  <div class="col-sm-3">
+    <label class="form-label mb-1">End</label>
+    <input type="date" class="form-control" name="end" value="{{ filter_end }}">
+  </div>
+  <div class="col-sm-3">
+    <label class="form-label mb-1">Position</label>
+    <select name="position" class="form-select">
+      <option value="">All positions</option>
+      {% for p in positions %}
+        <option value="{{ p }}" {% if filter_position==p %}selected{% endif %}>{{ p }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="col-sm-3 d-flex align-items-end">
+    <div>
+      <button class="btn btn-primary me-2" type="submit">Apply</button>
+      <a class="btn btn-outline-secondary" href="{{ url_for('analytics') }}">Reset</a>
+    </div>
+  </div>
+</form>
+
+<div class="row g-3 mb-4">
+  <div class="col-md-3">
+    <div class="card"><div class="card-body">
+      <div class="text-muted">Total Hours</div>
+      <div class="fs-4 fw-bold">{{ '%.2f' % total_hours }}</div>
+    </div></div>
+  </div>
+  <div class="col-md-3">
+    <div class="card"><div class="card-body">
+      <div class="text-muted">Wages</div>
+      <div class="fs-4 fw-bold">${{ '%.2f' % total_wages }}</div>
+    </div></div>
+  </div>
+  <div class="col-md-3">
+    <div class="card"><div class="card-body">
+      <div class="text-muted">Tips</div>
+      <div class="fs-4 fw-bold">${{ '%.2f' % total_tips }}</div>
+    </div></div>
+  </div>
+  <div class="col-md-3">
+    <div class="card"><div class="card-body">
+      <div class="text-muted">Effective $/hr</div>
+      <div class="fs-4 fw-bold">${{ '%.2f' % effective_hourly }}</div>
+    </div></div>
+  </div>
+</div>
+
+<div class="row g-4">
+  <div class="col-lg-6">
+    <div class="card"><div class="card-body">
+      <h5 class="card-title">Monthly Pay</h5>
+      <canvas id="monthlyPay"></canvas>
+    </div></div>
+  </div>
+  <div class="col-lg-6">
+    <div class="card"><div class="card-body">
+      <h5 class="card-title">Monthly Breakdown</h5>
+      <canvas id="monthlyBreakdown"></canvas>
+    </div></div>
+  </div>
+  <div class="col-lg-6">
+    <div class="card"><div class="card-body">
+      <h5 class="card-title">Daily Pay Trend</h5>
+      <canvas id="dailyTrend"></canvas>
+    </div></div>
+  </div>
+  <div class="col-lg-6">
+    <div class="card"><div class="card-body">
+      <h5 class="card-title">By Position: Total Pay</h5>
+      <canvas id="byPositionPay"></canvas>
+    </div></div>
+  </div>
+  <div class="col-lg-6">
+    <div class="card"><div class="card-body">
+      <h5 class="card-title">By Position: Hours</h5>
+      <canvas id="byPositionHours"></canvas>
+    </div></div>
+  </div>
+</div>
+
+<script id="analytics-payload" type="application/json">{{ {
+  'monthly_labels': monthly_labels,
+  'monthly_hours': monthly_hours,
+  'monthly_wages': monthly_wages,
+  'monthly_tips': monthly_tips,
+  'monthly_pay': monthly_pay,
+  'position_labels': position_labels,
+  'position_hours': position_hours,
+  'position_pay': position_pay,
+  'daily_labels': daily_labels,
+  'daily_pay': daily_pay
+} | tojson | safe }}</script>
+<script src="{{ url_for('static', filename='js/analytics.js') }}"></script>
+{% endblock %}
+
+
+
